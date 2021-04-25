@@ -19,6 +19,8 @@ from bs4 import BeautifulSoup
 import json
 import argparse
 import requests
+import os
+import sys
 
 date_count = 3000
 #2012-09-18
@@ -37,11 +39,10 @@ scraper = cloudscraper.create_scraper()
 client_secret="secret"
 
 _almanax = dict()
-# first span the dates
 
-# get it in english
-
-# then all other langs
+# https://stackoverflow.com/questions/4934806/how-can-i-find-scripts-directory
+def get_script_path():
+    return os.path.dirname(os.path.realpath(sys.argv[0]))
 
 def addLangArrIfNotExist(obj, lang):
     if lang not in obj:
@@ -60,7 +61,7 @@ def scrape_all_langs(start_date=None, end_date=None):
         scrape(curr_date, "it")
         scrape(curr_date, "es")
 
-    with open("almanax-data.json", 'w') as f:
+    with open(get_script_path() + "/almanax-data.json", 'w') as f:
         json.dump(_almanax, f, indent=4, ensure_ascii=False)
 
 def scrape(date, lang):
@@ -142,7 +143,7 @@ def scrape(date, lang):
     _almanax[lang].append(data)
 
 def all_to_api():
-    with open("almanax-data.json", 'r') as f:
+    with open(get_script_path() + "/almanax-data.json", 'r') as f:
         data = json.load(f)
 
     for offering in data["en"]:
@@ -182,7 +183,7 @@ if __name__ == "__main__":
     if args.daily:
         date_start = datetime.today().strftime('%Y-%m-%d')
         date_start_f = datetime.strptime(date_start, date_format)
-        date_in_a_month = (date_start_f + timedelta(days=35)).strftime(date_format)
+        date_in_a_month = (date_start_f + timedelta(days=38)).strftime(date_format)
         scrape_all_langs(date_start, date_in_a_month)
         all_to_api()
 
@@ -192,5 +193,3 @@ if __name__ == "__main__":
 
     if args.api:
         all_to_api()
-
-
