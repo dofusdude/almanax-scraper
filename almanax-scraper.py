@@ -13,7 +13,7 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
 
-import cloudscraper
+import cfscrape
 from datetime import datetime, timedelta
 from bs4 import BeautifulSoup
 import json
@@ -23,7 +23,7 @@ import os
 import sys
 
 date_count = 3000
-#2012-09-18
+# 2012-09-18
 
 
 almanax_api_url="https://alm.dofusdu.de/dofus"
@@ -31,22 +31,27 @@ almanax_api_url="https://alm.dofusdu.de/dofus"
 
 base_url = "http://www.krosmoz.com"
 date_format = '%Y-%m-%d'
-today=datetime.strptime("2012-09-18", date_format)
+today = datetime.strptime("2012-09-18", date_format)
 iterate_link = ""
 
-scraper = cloudscraper.create_scraper()
+session = requests.Session()
 
-client_secret="secret"
+scraper = cfscrape.create_scraper(sess=session)
+
+client_secret = "secret"
 
 _almanax = dict()
+
 
 # https://stackoverflow.com/questions/4934806/how-can-i-find-scripts-directory
 def get_script_path():
     return os.path.dirname(os.path.realpath(sys.argv[0]))
 
+
 def addLangArrIfNotExist(obj, lang):
     if lang not in obj:
         obj[lang] = []
+
 
 def scrape_all_langs(start_date=None, end_date=None):
     start = datetime.strptime(start_date, date_format) if start_date else today
@@ -63,6 +68,7 @@ def scrape_all_langs(start_date=None, end_date=None):
 
     with open(get_script_path() + "/almanax-data.json", 'w') as f:
         json.dump(_almanax, f, indent=4, ensure_ascii=False)
+
 
 def scrape(date, lang):
     iterate_link = base_url + "/" + lang + "/almanax/" + date
@@ -92,23 +98,22 @@ def scrape(date, lang):
         take_end = " y llevárselo"
         bonus_take = "Bonus: "
 
-
-    html = scraper.get(iterate_link).text
+    html = scraper.get(iterate_link).content
 
     soup = BeautifulSoup(html, 'html.parser')
 
     dofus_container = soup.find(id="achievement_dofus")
-    mid_container = dofus_container.find("div", {"class" : "more"})
+    mid_container = dofus_container.find("div", {"class": "more"})
 
-    bonus_type = str(mid_container.previousSibling).strip()[len(bonus_take):] # take only in english
+    bonus_type = str(mid_container.previousSibling).strip()[len(bonus_take):]  # take only in english
 
-    offering = mid_container.find("p", {"class" : "fleft"}).text
+    offering = mid_container.find("p", {"class": "fleft"}).text
     offering = offering.strip()
     index_start = len(take_begin)
 
     index_stop = offering.index(take_end)
     offering = offering[index_start:index_stop]
-        
+
     offering_count = 0
 
     for s in offering.split():
@@ -125,11 +130,6 @@ def scrape(date, lang):
     bonus = bonus.replace('<i>', '').replace('</i>', '')
     bonus = bonus.replace('<u>', '').replace('</u>', '')
 
-    #print(date)
-    #print(lang)
-
-    # iterate every day through all langs   
-    #iterate_link = base_url + soup.find(id="next_day")['href']
     data = {
         "date": date,
         "item_quantity": offering_count,
@@ -141,6 +141,7 @@ def scrape(date, lang):
     }
     addLangArrIfNotExist(_almanax, lang)
     _almanax[lang].append(data)
+
 
 def all_to_api():
     with open(get_script_path() + "/almanax-data.json", 'r') as f:
@@ -166,14 +167,15 @@ def all_to_api():
                 print(r.json().get("errors"))
                 exit(r.status_code)
 
+
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="scrape dofus almanax")
     group = parser.add_mutually_exclusive_group()
 
-    group.add_argument("--scrape", action="store_true", help="add a item type to scrape")
+    group.add_argument("--scrape", action="store_true", help="scrape from beginning of almanax time")
     group.add_argument("--api", action="store_true", help="sends the generated data to the api")
-    group.add_argument("--daily", action="store_true", help="scrapes next month and sends to api")
+    group.add_argument("--daily", action="store_true", help="scrapes next month and sends to api", default=True)
 
     parser.add_argument("--start", help="start date", type=str)
     parser.add_argument("--end", help="end date", type=str)
@@ -186,7 +188,6 @@ if __name__ == "__main__":
         date_in_a_month = (date_start_f + timedelta(days=38)).strftime(date_format)
         scrape_all_langs(date_start, date_in_a_month)
         all_to_api()
-
 
     if args.scrape:
         scrape_all_langs(args.start, args.end)
