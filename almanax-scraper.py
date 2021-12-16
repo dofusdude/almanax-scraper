@@ -147,19 +147,28 @@ def all_to_api():
     with open(get_script_path() + "/almanax-data.json", 'r') as f:
         data = json.load(f)
 
+    # insert all new entries in english
     for offering in data["en"]:
-        r = requests.post(almanax_api_url, json=offering, headers={"Authorization": f"Bearer {client_secret}"})
+        r = requests.post(almanax_api_url, json=offering, headers={"Authorization": f"Bearer {client_secret}"})  # created 201 when all ok
         if r.status_code > 214 and r.status_code != 406:
             print(offering)
             print(r.status_code)
             print(r.json().get("errors"))
             exit(r.status_code)
 
+        if r.status_code == 406:
+            # exists but can be outdated
+            # 200 == no update, 201 == created new one, expecting translations for that now
+            p = requests.put(almanax_api_url, json=offering, headers={"Authorization": f"Bearer {client_secret}"})
+            if p.status_code == 201:
+                print("just updated an offering")
+
+    # add the translations
     for lang, offerings in data.items():
         if lang == "en":
             continue
         for offering in offerings:
-            r = requests.put(almanax_api_url, json=offering, headers={"Authorization": f"Bearer {client_secret}"})
+            r = requests.put(f"{almanax_api_url}/translate", json=offering, headers={"Authorization": f"Bearer {client_secret}"})
 
             if r.status_code > 214:
                 print(offering)
