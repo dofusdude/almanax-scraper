@@ -1,6 +1,6 @@
 """
 Almanax Scraper: Multilingual scraping of the Dofus Almanax.
-Copyright (C) 2021 Christopher Sieh
+Copyright (C) 2022 Christopher Sieh
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation, either version 3 of the License, or
@@ -13,7 +13,6 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
 
-import cfscrape
 from datetime import datetime, timedelta
 from bs4 import BeautifulSoup
 import json
@@ -22,51 +21,51 @@ import requests
 import os
 import sys
 
-date_count = 3000
-# 2012-09-18
-
-
 almanax_api_url="https://alm.dofusdu.de/dofus"
-
 
 base_url = "http://www.krosmoz.com"
 date_format = '%Y-%m-%d'
-today = datetime.strptime("2012-09-18", date_format)
+almanax_start_date = datetime.strptime("2012-09-18", date_format)
 iterate_link = ""
-
-session = requests.Session()
-
-scraper = cfscrape.create_scraper(sess=session)
+daily_json_file = "almanax-data.json"
 
 client_secret = "secret"
 
 _almanax = dict()
 
-
 # https://stackoverflow.com/questions/4934806/how-can-i-find-scripts-directory
 def get_script_path():
     return os.path.dirname(os.path.realpath(sys.argv[0]))
 
+daily_json_file_abs = get_script_path() + "/" + daily_json_file
 
 def addLangArrIfNotExist(obj, lang):
     if lang not in obj:
         obj[lang] = []
 
+# help looping over a range between two dates
+def date_range(start, end):
+    for n in range(int((end - start).days)+1):
+        yield start + timedelta(n)
 
-def scrape_all_langs(start_date=None, end_date=None):
-    start = datetime.strptime(start_date, date_format) if start_date else today
-    for i in range(date_count):
-        curr_date = (start + timedelta(days=i)).strftime(date_format)
-        if end_date and curr_date == end_date:
-            break
+def scrape_all_langs(start_date=None, end_date=None, out_file_include_range=False):
+    start = datetime.strptime(start_date, date_format) if start_date else almanax_start_date
+    end = datetime.strptime(end_date, date_format) if end_date else datetime.today()
+    for curr_date in date_range(start, end):
+        curr_date = curr_date.strftime(date_format)
         print("scraping " + curr_date)
-        scrape(curr_date, "en")
+        try:
+            scrape(curr_date, "en")
+        except:
+            print(f"day {curr_date} failed")
+            continue
         scrape(curr_date, "fr")
         scrape(curr_date, "de")
         scrape(curr_date, "it")
         scrape(curr_date, "es")
 
-    with open(get_script_path() + "/almanax-data.json", 'w') as f:
+    out_file = f"almanax-data-{start.strftime(date_format)}_{end.strftime(date_format)}.json" if out_file_include_range else daily_json_file
+    with open(get_script_path() + "/" + out_file, 'w') as f:
         json.dump(_almanax, f, indent=4, ensure_ascii=False)
 
 
@@ -98,7 +97,7 @@ def scrape(date, lang):
         take_end = " y llevárselo"
         bonus_take = "Bonus: "
 
-    html = scraper.get(iterate_link).content
+    html = requests.get(iterate_link).content
 
     soup = BeautifulSoup(html, 'html.parser')
 
@@ -143,8 +142,8 @@ def scrape(date, lang):
     _almanax[lang].append(data)
 
 
-def all_to_api():
-    with open(get_script_path() + "/almanax-data.json", 'r') as f:
+def json_to_api(path):
+    with open(path, 'r') as f:
         data = json.load(f)
 
     # insert all new entries in english
@@ -182,24 +181,47 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="scrape dofus almanax")
     group = parser.add_mutually_exclusive_group()
 
-    group.add_argument("--scrape", action="store_true", help="scrape from beginning of almanax time")
+    group.add_argument("--scrape", action="store_true", help="scrapes a range with start and end params, else from beginning of almanax time till today")
     group.add_argument("--api", action="store_true", help="sends the generated data to the api")
-    group.add_argument("--daily", action="store_true", help="scrapes next month and sends to api", default=True)
+    group.add_argument("--daily", action="store_true", help="scrapes next month and sends to api")
+    group.add_argument("--init", action="store_true", help="loads old almanax data if it exists and posts them to the api")
 
     parser.add_argument("--start", help="start date", type=str)
     parser.add_argument("--end", help="end date", type=str)
 
     args = parser.parse_args()
 
+    if args.init:
+        dirs = os.listdir(get_script_path())
+        for filename in dirs:
+            if not filename.endswith(".json") or not filename.startswith("almanax-data-"):
+                continue
+            file_cleaned = filename.replace("almanax-data-", "").replace(".json", "")
+            
+            file_date_range = filename.split("_")
+            if len(file_date_range) == 2:
+                with open(get_script_path() + "/" + filename, 'r') as f:
+                    data = json.load(f)
+                json_to_api(filename)
+
+        if os.path.exists(daily_json_file_abs):
+            json_to_api(daily_json_file_abs)
+
     if args.daily:
-        date_start = datetime.today().strftime('%Y-%m-%d')
+        try:
+            os.remove(daily_json_file_abs)
+        except:
+            pass
+
+        date_start = (datetime.today() - timedelta(days=7)).strftime(date_format)
         date_start_f = datetime.strptime(date_start, date_format)
         date_in_a_month = (date_start_f + timedelta(days=38)).strftime(date_format)
         scrape_all_langs(date_start, date_in_a_month)
-        all_to_api()
+        json_to_api(daily_json_file_abs)
 
     if args.scrape:
-        scrape_all_langs(args.start, args.end)
+        scrape_all_langs(args.start, args.end, True)
 
     if args.api:
-        all_to_api()
+        if os.path.exists(daily_json_file_abs):
+            json_to_api(daily_json_file_abs)
