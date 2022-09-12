@@ -21,7 +21,7 @@ import requests
 import os
 import sys
 
-almanax_api_url="https://alm.dofusdu.de/dofus"
+almanax_api_url="http://localhost:8080/dofus2/almanax"
 
 base_url = "http://www.krosmoz.com"
 date_format = '%Y-%m-%d'
